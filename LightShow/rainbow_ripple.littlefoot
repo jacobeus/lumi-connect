@@ -1,0 +1,181 @@
+// Rainbow ripple for LUMI Keys: a dim rainbow scrolls along the keys, and every key
+// strike sends a bright ripple of the opposite hue outwards.
+//
+// The program plays the keys itself (notes, pressure, glide pitch bend, octave
+// buttons): with the firmware's default key handler on, the key callbacks that
+// start the ripples are never called. Each event is reported to the host with
+// sendMessageToHost (kind, a, b), which `show.sh --verbose` prints.
+//
+// The ripple idea comes from benob's ripple.littlefoot
+// (https://github.com/benob/LUMI-lights/tree/master/littlefoot).
+
+const int numKeys = 24;
+const int maxRipples = 12;
+const int rippleLife = 1400;      // ms
+const int rippleSpeed = 28;       // keys per second
+const int backgroundLevel = 70;   // 0-255
+
+const int configOctave = 4;
+const int configGlideSensitivity = 11;
+const int minOctave = -4;
+const int maxOctave = 5;
+
+const int reportStart = 1;
+const int reportStrike = 2;
+const int reportMove = 3;
+const int reportOctave = 4;
+
+int pressed[numKeys];
+int channel[numKeys];
+int octave;
+
+int rippleOrigin[maxRipples];
+int rippleStart[maxRipples];
+int rippleHue[maxRipples];
+int rippleOn[maxRipples];
+
+int red[numKeys];
+int green[numKeys];
+int blue[numKeys];
+
+int hueR;
+int hueG;
+int hueB;
+
+void initialise()
+{
+    setUseDefaultKeyHandler (false, false);
+    octave = getLocalConfig (configOctave);
+    sendMessageToHost (reportStart, octave, getLocalConfig (configGlideSensitivity));
+    fillRect (0x00000000, 0, 0, numKeys, 1);
+}
+
+int getNote (int index)
+{
+    return 48 + octave * 12 + index;
+}
+
+void handleButtonDown (int index)
+{
+    if (index == 1 && octave > minOctave) --octave;
+    if (index == 2 && octave < maxOctave) ++octave;
+    setLocalConfig (configOctave, octave);
+    sendMessageToHost (reportOctave, index, octave);
+}
+
+// Sets hueR, hueG, hueB to the colour of hue 0-255 at full brightness.
+void setHue (int hue)
+{
+    int h = hue & 255;
+    int segment = h / 43;
+    int f = (h - segment * 43) * 6;
+    if (f > 255) f = 255;
+    int q = 255 - f;
+
+    if (segment == 0)      { hueR = 255; hueG = f;   hueB = 0;   }
+    else if (segment == 1) { hueR = q;   hueG = 255; hueB = 0;   }
+    else if (segment == 2) { hueR = 0;   hueG = 255; hueB = f;   }
+    else if (segment == 3) { hueR = 0;   hueG = q;   hueB = 255; }
+    else if (segment == 4) { hueR = f;   hueG = 0;   hueB = 255; }
+    else                   { hueR = 255; hueG = 0;   hueB = q;   }
+}
+
+int backgroundHue (int index, int now)
+{
+    return index * 11 + now / 12;
+}
+
+void addColour (int index, int level)
+{
+    red[index]   += hueR * level / 255;
+    green[index] += hueG * level / 255;
+    blue[index]  += hueB * level / 255;
+}
+
+void keyStrike (int index, int z, int vz)
+{
+    pressed[index] = 1;
+
+    // Reuse a free slot, or the oldest ripple.
+    int slot = 0;
+    int oldest = 0x7fffffff;
+    for (int r = 0; r < maxRipples; ++r)
+    {
+        if (! rippleOn[r]) { slot = r; break; }
+        if (rippleStart[r] < oldest) { oldest = rippleStart[r]; slot = r; }
+    }
+    int now = getMillisecondCounter();
+    rippleOn[slot] = 1;
+    rippleOrigin[slot] = index;
+    rippleStart[slot] = now;
+    rippleHue[slot] = backgroundHue (index, now) + 128;
+
+    int note = getNote (index);
+    int chan = assignChannel (note);
+    channel[index] = chan;
+    sendNoteOn (chan, note, vz);
+    sendMessageToHost (reportStrike, index, vz);
+}
+
+void keyPress (int index, int z, int vz)
+{
+    sendAftertouch (channel[index], getNote (index), z);
+}
+
+void keyMove (int index, int pitchbend, int aftertouch)
+{
+    sendPitchBend (channel[index], pitchbend);
+    sendMessageToHost (reportMove, index, pitchbend);
+}
+
+void keyLift (int index, int z, int vz)
+{
+    pressed[index] = 0;
+    int note = getNote (index);
+    int chan = channel[index];
+    sendNoteOff (chan, note, vz);
+    deassignChannel (note, chan);
+}
+
+void repaint()
+{
+    int now = getMillisecondCounter();
+
+    for (int i = 0; i < numKeys; ++i)
+    {
+        red[i] = 0;
+        green[i] = 0;
+        blue[i] = 0;
+        setHue (backgroundHue (i, now));
+        addColour (i, backgroundLevel);
+    }
+
+    for (int r = 0; r < maxRipples; ++r)
+    {
+        if (! rippleOn[r]) continue;
+        int elapsed = now - rippleStart[r];
+        if (elapsed > rippleLife) { rippleOn[r] = 0; continue; }
+
+        int front = elapsed * rippleSpeed / 1000;
+        int fade = 255 - elapsed * 255 / rippleLife;
+        setHue (rippleHue[r]);
+
+        for (int i = 0; i < numKeys; ++i)
+        {
+            int behind = front - abs (i - rippleOrigin[r]);
+            if (behind < 0 || behind > 4) continue;
+            addColour (i, fade * (255 - behind * 60) / 255);
+        }
+    }
+
+    for (int i = 0; i < numKeys; ++i)
+    {
+        if (pressed[i])
+        {
+            red[i] += 120;
+            green[i] += 120;
+            blue[i] += 120;
+        }
+        fillPixel (makeARGB (255, min (red[i], 255), min (green[i], 255), min (blue[i], 255)), i, 0);
+    }
+}

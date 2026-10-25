@@ -65,6 +65,24 @@ Now switch on **Scale** in a MIDI clip and pick a root and scale: the LUMI light
 
 The settings are written to the LUMI's current configuration, as ROLI Dashboard would write them.
 
+## Light show (optional)
+
+`LightShow/` runs a rainbow ripple on the LUMI: a dim rainbow scrolls along the keys, and every note you play sends a bright ripple outwards. The LUMI keeps playing as usual: notes, pressure, pitch bend and the octave buttons.
+
+| Action | How |
+|---|---|
+| **Start** | Switch the LUMI on, then run `LightShow/show.sh`. The first run builds the tool, which needs `cmake` (`brew install cmake`) |
+| **Stop** | Press Ctrl-C in that terminal. The LUMI goes back to its own program |
+| **See what the LUMI sends** | `LightShow/show.sh --verbose` prints every strike, octave change and pitch bend |
+
+The show is temporary: the program is never saved on the LUMI, and it only runs while `show.sh` does. The octave buttons still save the octave, as they do with ROLI's program.
+
+While it runs, the scale lighting from Live has no visible effect, and the colour mode, key and scale settings do nothing. The keys play from the octave the LUMI has saved, without the transpose setting.
+
+The program is `LightShow/rainbow_ripple.littlefoot`. Its speed, ripple length and brightness are constants at the top. Run another LittleFoot program with `LightShow/show.sh other.littlefoot`.
+
+Building downloads [JUCE](https://github.com/juce-framework/JUCE), licensed under the AGPLv3 or a commercial licence, and ROLI's [BLOCKS SDK](https://github.com/WeAreROLI/roli_blocks_basics), ISC licence.
+
 ## Troubleshooting
 
 | Symptom | Check |
@@ -76,11 +94,11 @@ The settings are written to the LUMI's current configuration, as ROLI Dashboard 
 
 ## How it works
 
-[docs/PROTOCOL.md](docs/PROTOCOL.md) explains why macOS will not reconnect the LUMI on its own, how Lumi Connect gets it connected, and the SysEx (system exclusive MIDI) messages the remote script sends.
+[docs/PROTOCOL.md](docs/PROTOCOL.md) explains why macOS will not reconnect the LUMI on its own, how Lumi Connect gets it connected, the SysEx (system exclusive MIDI) messages the remote script sends, and how the light show runs its own program on the LUMI.
 
 ## Credits
 
-The LUMI SysEx messages come from [benob/LUMI-lights](https://github.com/benob/LUMI-lights), which recorded what ROLI Dashboard sends.
+The LUMI SysEx messages come from [benob/LUMI-lights](https://github.com/benob/LUMI-lights), which recorded what ROLI Dashboard sends. The light show's ripple comes from benob's `ripple.littlefoot`.
 
 ## License
 

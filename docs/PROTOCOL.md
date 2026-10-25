@@ -72,6 +72,20 @@ Example: key E (root 4) on index `0x2B` is `F0 00 21 10 77 2B 10 30 03 01 00 00 
 
 The group byte and the first value byte share bits, so the same group number appears with different meanings in benob's notes: `30` also sets the root key colour, and `40` also sets brightness and octave. The table above lists only the values this project sends and has tested.
 
+## LittleFoot programs
+
+The LUMI runs a program written in ROLI's [LittleFoot](https://github.com/WeAreROLI/roli_blocks_basics/blob/main/roli_LittleFootFunctions.dox) language, which draws the key lights and can play the keys. `LightShow/` replaces it with its own through ROLI's BLOCKS SDK (`roli_blocks_basics`):
+
+| Fact | Detail |
+|---|---|
+| **Finding the LUMI** | The SDK accepts any MIDI port whose name contains `" BLOCK"` (`roli_BlockNameController.h`), so the Bluetooth port works. It reports the LUMI as `ROLI Piano M` |
+| **Temporary load** | `Block::setProgram` defaults to `ProgramPersistency::setAsTemp`. `resetProgramToDefault()` puts the LUMI's own program back |
+| **Saving to flash** | `setAsDefault` survives power-off, but only a factory reset undoes it, and that also wipes the LUMI's settings. Lumi Connect never saves |
+| **Key handling** | With `setUseDefaultKeyHandler (true, false)` the firmware plays the keys but never calls the program's `keyStrike`, so a program that reacts to keys has to play them itself |
+| **Callbacks to implement** | `keyStrike` (note on), `keyPress` (aftertouch), `keyMove` (pitch bend, 0 to 16383, 8192 at rest), `keyLift` (note off), `handleButtonDown` (button 1 octave down, 2 octave up) |
+| **Settings it reads** | `getLocalConfig (4)` is the saved octave, `getLocalConfig (11)` the glide (pitch bend) sensitivity |
+| **Debugging** | `sendMessageToHost (a, b, c)` reaches the host as a program event (`Block::addProgramEventListener`) |
+
 ## Ableton
 
 The remote script follows the song-level properties `Song.root_note`, `Song.scale_name` and, where it exists, `Song.scale_mode`. In Live 11, setting a clip's Scale updates these. Live loads remote scripts once at startup, so it needs a restart after the script changes.
